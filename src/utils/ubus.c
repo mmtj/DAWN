@@ -2103,6 +2103,7 @@ int build_network_overview(struct blob_buf *b) {
     dawnlog_debug_func("Entering...");
 
     void *client_list, *ap_list, *ssid_list;
+    void *wifi_client;
     char ap_mac_buf[20];
     char client_mac_buf[20];
     struct hostapd_sock_entry *sub;
@@ -2152,11 +2153,13 @@ int build_network_overview(struct blob_buf *b) {
 
         // TODO: Could optimise this by exporting search func, but not a core process
         dawn_mutex_require(&client_array_mutex);
+        // NOTE: use json array for wifi clients objects
+        client_list = blobmsg_open_array(b, "clients");
         client *k = *client_find_first_bc_entry(m->bssid_addr, dawn_mac_null, false);
         while (k != NULL && mac_is_equal_bb(m->bssid_addr, k->bssid_addr)) {
 
             sprintf(client_mac_buf, MACSTR, MAC2STR(k->client_addr.u8));
-            client_list = blobmsg_open_table(b, client_mac_buf);
+            wifi_client = blobmsg_open_table(b, client_mac_buf);
 
             if (strlen(k->signature) != 0)
             {
@@ -2182,10 +2185,11 @@ int build_network_overview(struct blob_buf *b) {
             }
             dawn_mutex_unlock(&probe_array_mutex);
 
-            blobmsg_close_table(b, client_list);
+            blobmsg_close_table(b, wifi_client);
 
             k = k->next_entry_bc;
         }
+        blobmsg_close_array(b, client_list);
         blobmsg_close_table(b, ap_list);
 
         // Rely on short-circuit of OR to protect NULL reference in 2nd clause
