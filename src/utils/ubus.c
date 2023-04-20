@@ -2102,22 +2102,28 @@ int build_hearing_map_sort_client(struct blob_buf *b) {
 int build_network_overview(struct blob_buf *b) {
     dawnlog_debug_func("Entering...");
 
-    void *client_list, *ap_list, *ssid_list;
+    void *client_list, *ap_list, *ssid_list, *ssid_item;
     char ap_mac_buf[20];
     char client_mac_buf[20];
     struct hostapd_sock_entry *sub;
+
+    ssid_list = blobmsg_open_array(b, "ssids");
 
     bool add_ssid = true;
     dawn_mutex_require(&ap_array_mutex);
     for (ap* m = ap_set; m != NULL; m = m->next_ap) {
         if(add_ssid)
         {
-            ssid_list = blobmsg_open_table(b, (char *) m->ssid);
+            ssid_item = blobmsg_open_table(b, NULL);
+            blobmsg_add_string(b, "ssid", (char *) m->ssid);
+            ap_list = blobmsg_open_array(b, "phy_aps");
+
             add_ssid = false;
         }
         sprintf(ap_mac_buf, MACSTR, MAC2STR(m->bssid_addr.u8));
-        ap_list = blobmsg_open_table(b, ap_mac_buf);
 
+        void * ap_item = blobmsg_open_table(b, NULL);
+        blobmsg_add_string(b, "macaddr", ap_mac_buf);
         blobmsg_add_u32(b, "channel", m->channel);
         blobmsg_add_u32(b, "freq", m->freq);
         blobmsg_add_u32(b, "channel_utilization", m->channel_utilization);
@@ -2149,6 +2155,7 @@ int build_network_overview(struct blob_buf *b) {
         hostname = blobmsg_alloc_string_buffer(b, "hostname", HOST_NAME_MAX);
         sprintf(hostname, "%s", m->hostname);
         blobmsg_add_string_buffer(b);
+        client_list = blobmsg_open_array(b, "wifi_clients");
 
         // TODO: Could optimise this by exporting search func, but not a core process
         dawn_mutex_require(&client_array_mutex);
@@ -2156,8 +2163,9 @@ int build_network_overview(struct blob_buf *b) {
         while (k != NULL && mac_is_equal_bb(m->bssid_addr, k->bssid_addr)) {
 
             sprintf(client_mac_buf, MACSTR, MAC2STR(k->client_addr.u8));
-            client_list = blobmsg_open_table(b, client_mac_buf);
 
+            void * client_item = blobmsg_open_table(b, NULL);
+            blobmsg_add_string(b, "macaddr", client_mac_buf);
             if (strlen(k->signature) != 0)
             {
                 char* s;
@@ -2182,18 +2190,21 @@ int build_network_overview(struct blob_buf *b) {
             }
             dawn_mutex_unlock(&probe_array_mutex);
 
-            blobmsg_close_table(b, client_list);
+            blobmsg_close_table(b, client_item);
 
             k = k->next_entry_bc;
         }
-        blobmsg_close_table(b, ap_list);
+        blobmsg_close_array(b, client_list);
+        blobmsg_close_table(b, ap_item);
+        blobmsg_close_array(b, ap_list);
 
         // Rely on short-circuit of OR to protect NULL reference in 2nd clause
         if ((m->next_ap == NULL) || strcmp((char*)m->ssid, (char*)(m->next_ap)->ssid) != 0) {
-            blobmsg_close_table(b, ssid_list);
+            blobmsg_close_table(b, ssid_item);
             add_ssid = true;
         }
     }
+    blobmsg_close_array(b, ssid_list);
 
     return 0;
 }
